@@ -1,0 +1,10 @@
+[Unit]
+Description=MITM proxy which embeds visited content
+
+[Service]
+Type=exec
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/mitmdump --mode regular --listen-host localhost --listen-port 8080 --scripts %Y/llm-mitm-embed.py
+
+[Install]
+WantedBy=default.target
