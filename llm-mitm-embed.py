@@ -6,7 +6,7 @@ import threading
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen, Request
 
-from flask import Flask, request
+from flask import Flask, request, make_response
 import frontmatter
 from mitmproxy import ctx
 from mitmproxy.addons.asgiapp import WSGIApp
@@ -55,6 +55,8 @@ def search_form() -> str:
         </html>
     """
 
+cache = dict()
+
 @search.route('/search', methods=['POST'])
 def search_result():
     q = request.form.get('q')
@@ -63,13 +65,18 @@ def search_result():
         stdout=subprocess.PIPE, text=True
     )
     results = [json.loads(rec) for rec in process.stdout.split("\n") if rec]
-    ul = '<ul>'
+    ul = '<ol>'
     for item in results:
+        cache[item['id']] = item['content']
         score = round(item['score'], 3)
         url = item['id']
         title = item['metadata']['title'] if item['metadata'] else None
-        ul += f'<li>{score}: <a href="{url}">{title or url}</a></li>'
-    ul += '</ul>'
+        ul += f'<li>{score}: <a href="{url}">{title or url}</a>'
+        ul += '<br><form action="/cache" method="POST">'
+        ul += f'<input type="hidden" name="id" value="{item['id']}">'
+        ul += '<input type="submit" value="Cached">'
+        ul += '</form></li>'
+    ul += '</ol>'
 
     return f"""
         <html>
@@ -79,6 +86,14 @@ def search_result():
         </body>
         </html>
     """
+
+
+@search.route('/cache', methods=['POST'])
+def cached_content():
+    response = make_response(cache[request.form.get('id')])
+    response.mimetype = 'text/plain'
+    return response
+
 
 
 addons = [EmbedVisited(), WSGIApp(search, ctx.options.listen_host, ctx.options.listen_port)]
