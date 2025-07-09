@@ -67,13 +67,24 @@ def search_result():
     results = [json.loads(rec) for rec in process.stdout.split("\n") if rec]
     ul = '<ol>'
     for item in results:
-        cache[item['id']] = item['content']
+        if item['metadata']:
+            post = frontmatter.Post(item['content'],
+                handler=frontmatter.YAMLHandler(), **item['metadata']
+            )
+            cache[item['id']] = frontmatter.dumps(post)
+        else:
+            cache[item['id']] = item['content']
+
         score = round(item['score'], 3)
         url = item['id']
         title = item['metadata']['title'] if item['metadata'] else None
+        synopsis = "<br>"
+        if item['metadata']:
+            if "description" in item['metadata']:
+                synopsis = f'<p>{item["metadata"]["description"]}</p>'
         ul += f'<li>{score}: <a href="{url}">{title or url}</a>'
-        ul += '<br><form action="/cache" method="POST">'
-        ul += f'<input type="hidden" name="id" value="{item['id']}">'
+        ul += f'{synopsis}<form action="/cache" method="POST">'
+        ul += f'<input type="hidden" name="id" value="{item["id"]}">'
         ul += '<input type="submit" value="Cached">'
         ul += '</form></li>'
     ul += '</ol>'
@@ -93,7 +104,6 @@ def cached_content():
     response = make_response(cache[request.form.get('id')])
     response.mimetype = 'text/plain'
     return response
-
 
 
 addons = [EmbedVisited(), WSGIApp(search, ctx.options.listen_host, ctx.options.listen_port)]
@@ -122,4 +132,12 @@ def markdown(url):
     ))
     request = Request(pure, headers={'User-Agent': USER_AGENT})
     with urlopen(request) as response:
-        return frontmatter.parse(response.read().decode('utf-8'))
+        content = response.read().decode('utf-8')
+        try:
+            return frontmatter.parse(content,
+                handler=frontmatter.YAMLHandler()
+            )
+        except Exception as e:
+            print(content)
+            print(e)
+            return {}, content
